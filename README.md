@@ -63,11 +63,15 @@ For a local checkout, keep this folder outside your project's `Assets` directory
 - **Unity-style multi-edit inspector** — shared values show normally, differing values show the mixed dash `—`; committing a value writes it to every selected region as one undo step.
 - **Interactive 9-slice borders** — drag the mid-edge points; border lines stay visible on every bordered region, selected or not.
 - **Draggable pivots** — a blue ring on every selected region. Grabbing a preset pivot (e.g. BottomCenter) converts it to Custom *in place*, so it never jumps. Pivot values can be shown in normalized units or pixels.
+- **Keep Pivot Position** — an optional toggle under Rect keeps pivots anchored to the artwork when moving or resizing regions, including numeric multi-edit and nudging. Presets become Custom only when needed; undo restores both the rect and pivot.
+- **Relative pivot offsets** — enter X/Y in pixels and click **Shift Pivots** to move every selected pivot from its current position, preserving differences across frame sizes and alignments. Each click is one undo step.
 - **Pivot alignment** — align pivots across selected regions.
 - **Live inspector** — values update while you drag, not on mouse release.
 
 ### Region operations
 
+- **Property and shape clipboard** — copy one sprite and selectively paste pivots, borders, outlines, physics shapes, and tessellation onto a selection, including across textures. Preview coordinate mappings and exclude incompatible targets before one undoable paste.
+- **Trim and uniform frame bounds** — the Bounds panel previews transparency trimming (alpha threshold and padding) or common frame sizes around existing pivots. Preserves sprite IDs, outline/collider positions, and 9-slice lines; reports conflicts before applying the batch as one undo step.
 - **Combine** (`Ctrl+E`) — merge selected regions into one covering their union rect, via a dialog for the new name and pivot. One undo restores the originals.
 - **Split** — divide a region into a grid (by cell count or size), skipping empty cells, with children named `<base name>0, 1, 2…` and validated against name collisions.
 - **Batch rename** (`F2`) — composable rules in the style of PowerRename and Blender: base name with `{name}`/`{n}` tokens, find & replace (plain or regex with capture groups), strip, prefix/suffix, case change, numbering with start/step/padding. Counter order is selectable: row-major, column-major, selection order, or existing name — so `walk_0…walk_7` lines up with the strip. Live old → new preview with conflicts blocked before they happen.

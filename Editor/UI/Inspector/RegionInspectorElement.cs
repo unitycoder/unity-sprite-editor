@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BetterSpriteEditor.Model;
 using BetterSpriteEditor.Operations;
+using BetterSpriteEditor.Operations.Pivots;
 using BetterSpriteEditor.Operations.Shapes;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -151,9 +152,16 @@ namespace BetterSpriteEditor.UI.Inspector
         private IntegerField yField;
         private IntegerField widthField;
         private IntegerField heightField;
+        private Toggle keepPivotToggle;
+        private bool keepPivotPosition;
+        internal bool KeepPivotPosition => keepPivotPosition;
+        internal Action<bool> KeepPivotPositionChanged;
         private EnumField alignmentField;
         private EnumField unitModeField;
         private Vector2Field pivotField;
+        private Vector2Field pivotOffsetField;
+        private Button shiftPivotsButton;
+        private HelpBox pivotOffsetWarning;
         private IntegerField borderLeftField;
         private IntegerField borderRightField;
         private IntegerField borderTopField;
@@ -163,6 +171,7 @@ namespace BetterSpriteEditor.UI.Inspector
         private bool nameFieldEditing;
 
         private const string unitModePrefsKey = "BetterSpriteEditor.PivotUnitMode";
+        private const string keepPivotPrefsKey = "BetterSpriteEditor.KeepPivotPosition";
 
         private static PivotUnitMode LoadUnitMode()
         {
@@ -240,6 +249,22 @@ namespace BetterSpriteEditor.UI.Inspector
             fieldsRoot.Add(MakeFieldRow(
                 widthField = MakeIntField("W"), heightField = MakeIntField("H")));
 
+            keepPivotPosition = EditorPrefs.GetBool(keepPivotPrefsKey, false);
+            keepPivotToggle = new Toggle("Keep Pivot Position")
+            {
+                name = "keep-pivot-position",
+                value = keepPivotPosition,
+                tooltip = "Keep the pivot at the same texture pixel while moving or resizing the rect. " +
+                          "Presets change to Custom only when needed; the pivot can lie outside the rect."
+            };
+            keepPivotToggle.RegisterValueChangedCallback(evt =>
+            {
+                keepPivotPosition = evt.newValue;
+                EditorPrefs.SetBool(keepPivotPrefsKey, keepPivotPosition);
+                KeepPivotPositionChanged?.Invoke(keepPivotPosition);
+            });
+            fieldsRoot.Add(keepPivotToggle);
+
             fieldsRoot.Add(MakeSectionLabel("Border (9-slice)"));
             fieldsRoot.Add(MakeFieldRow(
                 borderLeftField = MakeIntField("L"), borderRightField = MakeIntField("R")));
@@ -260,44 +285,52 @@ namespace BetterSpriteEditor.UI.Inspector
             });
             fieldsRoot.Add(unitModeField);
 
-            pivotField = new Vector2Field("Pivot");
+            pivotField = MakeVector2Field("Pivot");
             pivotField.RegisterValueChangedCallback(OnPivotChanged);
-            // Default composite layout leaves the X/Y inputs very cramped in a narrow panel.
-            pivotField.labelElement.style.minWidth = 54;
-            pivotField.Query<FloatField>().ForEach(field =>
-            {
-                field.style.flexGrow = 1;
-                field.style.flexBasis = 0;
-                field.style.minWidth = 54;
-                field.labelElement.style.minWidth = 10;
-                field.labelElement.style.marginRight = 2;
-            });
             fieldsRoot.Add(pivotField);
+
+            pivotOffsetField = MakeVector2Field("Offset (px)", 76);
+            pivotOffsetField.name = "pivot-offset";
+            pivotOffsetField.tooltip = "Add this pixel offset to each selected pivot. Positive X moves right; " +
+                                       "positive Y moves up. Fractions and pivots outside the rect are allowed.";
+            pivotOffsetField.RegisterValueChangedCallback(_ => RefreshPivotOffsetControls());
+            fieldsRoot.Add(pivotOffsetField);
+            shiftPivotsButton = new Button(ShiftSelectedPivots)
+            {
+                name = "shift-pivots",
+                text = "Shift Pivots",
+                tooltip = "Shift each selected pivot from its current position as one undo step. " +
+                          "Click again to repeat the offset. Save the edits with Apply."
+            };
+            fieldsRoot.Add(shiftPivotsButton);
+            pivotOffsetWarning = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            fieldsRoot.Add(pivotOffsetWarning);
+            RefreshPivotOffsetControls();
 
             RegisterIntCallback(xField, "Move", (region, value) =>
             {
                 var rect = region.Rect;
                 rect.x = value;
                 region.Rect = rect;
-            });
+            }, rectEdit: true);
             RegisterIntCallback(yField, "Move", (region, value) =>
             {
                 var rect = region.Rect;
                 rect.y = value;
                 region.Rect = rect;
-            });
+            }, rectEdit: true);
             RegisterIntCallback(widthField, "Resize", (region, value) =>
             {
                 var rect = region.Rect;
                 rect.width = value;
                 region.Rect = rect;
-            });
+            }, rectEdit: true);
             RegisterIntCallback(heightField, "Resize", (region, value) =>
             {
                 var rect = region.Rect;
                 rect.height = value;
                 region.Rect = rect;
-            });
+            }, rectEdit: true);
             RegisterIntCallback(borderLeftField, "Edit border of", (region, value) =>
             {
                 var border = region.Border;
@@ -695,6 +728,7 @@ namespace BetterSpriteEditor.UI.Inspector
                 bool hasSelection = regions.Count > 0;
                 emptyLabel.style.display = hasSelection ? DisplayStyle.None : DisplayStyle.Flex;
                 fieldsRoot.style.display = hasSelection ? DisplayStyle.Flex : DisplayStyle.None;
+                RefreshPivotOffsetControls();
                 if (!hasSelection)
                     return;
 
@@ -709,6 +743,8 @@ namespace BetterSpriteEditor.UI.Inspector
                 nameField.SetEnabled(!multi && document.CanEditName);
                 foreach (var field in new[] { xField, yField, widthField, heightField })
                     field.SetEnabled(document.CanEditRect);
+                keepPivotToggle.SetEnabled(document.CanPreservePivotPosition);
+                keepPivotToggle.SetValueWithoutNotify(document.CanPreservePivotPosition && keepPivotPosition);
                 foreach (var field in new[] { borderLeftField, borderRightField, borderTopField, borderBottomField })
                     field.SetEnabled(document.Capabilities.Has(SpriteEditCapabilities.EditBorder));
                 alignmentField.SetEnabled(document.Capabilities.Has(SpriteEditCapabilities.EditPivot));
@@ -760,7 +796,7 @@ namespace BetterSpriteEditor.UI.Inspector
         /// Applies the mutation to every selected region (clone → mutate → clamp) and records
         /// the changes as one history entry.
         /// </summary>
-        private void ApplyEdit(string labelPrefix, Action<SpriteRegion> mutate)
+        private void ApplyEdit(string labelPrefix, Action<SpriteRegion> mutate, bool rectEdit = false)
         {
             var regions = GetSelectedRegions();
             if (regions.Count == 0 || refreshing)
@@ -776,6 +812,8 @@ namespace BetterSpriteEditor.UI.Inspector
                 var before = region.Clone();
                 mutate(region);
                 RegionValidator.Clamp(region, document.TextureWidth, document.TextureHeight);
+                if (rectEdit && keepPivotPosition && document.CanPreservePivotPosition)
+                    region.PreservePivotTexturePosition(before);
                 if (!RegionsEqual(before, region))
                     commands.Add(new ModifyRegionCommand(document, region.Id, before, region.Clone(), label));
             }
@@ -861,8 +899,8 @@ namespace BetterSpriteEditor.UI.Inspector
             if (refreshing)
                 return;
 
-            // In Pixels mode each region converts against its own size, so the same pixel
-            // offset stays visually identical across differently sized regions.
+            // This is an absolute position from each rect's origin. Relative adjustments
+            // use the separate Offset (px) control and Shift Pivots action.
             ApplyEdit("Set pivot of", region => region.Pivot = UnitMode == PivotUnitMode.Pixels
                 ? new Vector2(
                     region.Rect.width > 0f ? evt.newValue.x / region.Rect.width : 0f,
@@ -870,13 +908,44 @@ namespace BetterSpriteEditor.UI.Inspector
                 : evt.newValue);
         }
 
-        private void RegisterIntCallback(IntegerField field, string labelPrefix, Action<SpriteRegion, int> setter)
+        private void RefreshPivotOffsetControls()
+        {
+            bool canEdit = document != null && history != null
+                && document.Capabilities.Has(SpriteEditCapabilities.EditPivot)
+                && GetSelectedRegions().Count > 0;
+            var offset = pivotOffsetField.value;
+            bool finite = PivotOffset.IsFinite(offset);
+            pivotOffsetField.SetEnabled(canEdit);
+            shiftPivotsButton.SetEnabled(canEdit && finite && !offset.Equals(Vector2.zero));
+            ShowPivotOffsetWarning(canEdit && !finite ? "Enter a finite pixel offset for X and Y." : null);
+        }
+
+        private void ShowPivotOffsetWarning(string message)
+        {
+            pivotOffsetWarning.text = message ?? string.Empty;
+            pivotOffsetWarning.style.display = string.IsNullOrEmpty(message) ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
+        private void ShiftSelectedPivots()
+        {
+            if (refreshing || history == null)
+                return;
+            var command = PivotOffset.CreateCommand(document, GetSelectedRegions(), pivotOffsetField.value,
+                out string error);
+            if (command != null)
+                history.Do(command);
+            else
+                ShowPivotOffsetWarning(error);
+        }
+
+        private void RegisterIntCallback(IntegerField field, string labelPrefix, Action<SpriteRegion, int> setter,
+            bool rectEdit = false)
         {
             field.RegisterValueChangedCallback(evt =>
             {
-                if (refreshing)
+                if (refreshing || (rectEdit && (document == null || !document.CanEditRect)))
                     return;
-                ApplyEdit(labelPrefix, region => setter(region, evt.newValue));
+                ApplyEdit(labelPrefix, region => setter(region, evt.newValue), rectEdit);
             });
         }
 
@@ -887,6 +956,22 @@ namespace BetterSpriteEditor.UI.Inspector
                    && a.Alignment == b.Alignment
                    && a.Pivot == b.Pivot
                    && a.Border == b.Border;
+        }
+
+        private static Vector2Field MakeVector2Field(string label, float labelWidth = 54)
+        {
+            var vectorField = new Vector2Field(label);
+            // Default composite layout leaves the X/Y inputs very cramped in a narrow panel.
+            vectorField.labelElement.style.minWidth = labelWidth;
+            vectorField.Query<FloatField>().ForEach(field =>
+            {
+                field.style.flexGrow = 1;
+                field.style.flexBasis = 0;
+                field.style.minWidth = 54;
+                field.labelElement.style.minWidth = 10;
+                field.labelElement.style.marginRight = 2;
+            });
+            return vectorField;
         }
 
         private static IntegerField MakeIntField(string label)

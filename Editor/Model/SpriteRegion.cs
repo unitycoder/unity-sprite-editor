@@ -125,6 +125,29 @@ namespace BetterSpriteEditor.Model
                 Rect.yMin + normalized.y * Rect.height);
         }
 
+        /// <summary>
+        /// Keeps the original texture-space anchor after a rect edit. Call after the new
+        /// rect has been clamped to valid bounds, using the pre-edit (or drag-start) snapshot.
+        /// </summary>
+        internal void PreservePivotTexturePosition(SpriteRegion before)
+        {
+            // Restore these first: returning a drag to its starting rect must also restore
+            // the original preset and its stored custom value, without an undo entry.
+            Alignment = before.Alignment;
+            Pivot = before.Pivot;
+            if (Rect.Equals(before.Rect))
+                return;
+
+            var anchor = before.GetPivotTexturePosition();
+            if (GetPivotTexturePosition().Equals(anchor))
+                return; // The original alignment still expresses the same anchor.
+
+            Alignment = SpriteAlignment.Custom;
+            Pivot = new Vector2(
+                (anchor.x - Rect.xMin) / Rect.width,
+                (anchor.y - Rect.yMin) / Rect.height);
+        }
+
         /// <summary>Copies all editable fields (not the Id) from another region.</summary>
         public void CopyFrom(SpriteRegion source)
         {
@@ -149,6 +172,29 @@ namespace BetterSpriteEditor.Model
             foreach (var path in source)
                 result.Add(path == null ? System.Array.Empty<Vector2>() : (Vector2[])path.Clone());
             return result;
+        }
+
+        internal bool ContentEquals(SpriteRegion other)
+        {
+            return other != null && Id == other.Id && Name == other.Name && Rect.Equals(other.Rect)
+                && Alignment == other.Alignment && Pivot.Equals(other.Pivot) && Border.Equals(other.Border)
+                && CustomData == other.CustomData && OutlineTessellation.Equals(other.OutlineTessellation)
+                && PhysicsTessellation.Equals(other.PhysicsTessellation)
+                && PathsEqual(Outlines, other.Outlines) && PathsEqual(PhysicsOutlines, other.PhysicsOutlines);
+        }
+
+        private static bool PathsEqual(List<Vector2[]> a, List<Vector2[]> b)
+        {
+            int count = a?.Count ?? 0;
+            if (count != (b?.Count ?? 0)) return false;
+            for (int i = 0; i < count; i++)
+            {
+                int length = a[i]?.Length ?? 0;
+                if (length != (b[i]?.Length ?? 0)) return false;
+                for (int j = 0; j < length; j++)
+                    if (!a[i][j].Equals(b[i][j])) return false;
+            }
+            return true;
         }
 
         public SpriteRegion Clone()

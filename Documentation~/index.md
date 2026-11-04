@@ -27,6 +27,44 @@ Open a texture in the editor via one of:
 - right-click a texture in the Project window → `Open in Better Sprite Editor`,
 - the texture importer inspector's context menu (⋮) → `Open in Better Sprite Editor`.
 
+## Keeping pivots anchored
+
+Select a region and enable **Keep Pivot Position** under **Rect** in the inspector. Moving or resizing the rectangle then keeps its pivot at the same point in the texture. This applies to viewport handles, group movement, arrow-key nudging, and the X/Y/W/H fields, including multi-selection. Each selected region keeps its own anchor.
+
+The option is off by default and remembered as an editor preference. A preset alignment changes to Custom only when needed to retain the anchor. Pivots may end up outside the new rectangle; their position is preserved without rounding to whole pixels. Undo/redo restores the rectangle and pivot together. The option is available only when both rectangle and pivot editing are supported, in Multiple mode.
+
+## Shifting selected pivots
+
+Under **Pivot**, enter X and Y in **Offset (px)**, then click **Shift Pivots**. The offset is added to each selected pivot's current position: X = 2 and Y = -1 moves every pivot two pixels right and one pixel down. Different region sizes and starting pivots retain their differences. Positive Y moves up; fractional offsets and pivots outside the rectangle are supported.
+
+The offset always uses texture pixels, independent of Unit Mode and Keep Pivot Position. Changing the offset fields does not edit the sprites; each click applies the offset again as one undo step. Shifted presets become Custom, and undo restores their original alignment and value. Rectangles, borders, and outlines stay unchanged. The action works in Single and Multiple mode when pivot editing is supported. Use the main **Apply** action to save.
+
+## Trimming and standardizing frame bounds
+
+Select regions in Multiple mode and click **Bounds** in the toolbar. Choose **Trim Transparency** or **Uniform Frame Bounds**. Orange rectangles preview the proposed bounds; the panel lists each result and any conflict. **Change Bounds** updates the working document as one undo step. Use the main **Apply** button to save, or **Cancel** to discard the preview.
+
+**Trim Transparency** finds pixels whose alpha is greater than the threshold (0–254) and retains the requested padding, capped at the original rectangle. A threshold of 0 includes every nontransparent pixel. Regions with no pixels above the threshold stay unchanged. Trimming preserves fractional and outside-frame pivot anchors, so the artwork keeps its position relative to the pivot.
+
+**Uniform Frame Bounds** calculates the smallest common bounds around the existing pivots that contain every original rectangle. Padding adds space on each side. Disable **Automatic size** to request a larger width and height; extra space is split between opposite sides, with an odd extra pixel on the right/top. Every frame receives the same size and the same pivot offset within its rectangle. Compatible fractional pivot positions are required to keep rectangle edges on whole pixels. This operation retains existing frame content; use Trim first to remove unnecessary margins.
+
+Existing outline and collider vertices stay at their original artwork positions, and nonzero 9-slice border lines remain fixed. The panel blocks the entire batch if a proposed rectangle would clip a shape or border line, extend beyond the texture, or include any nontransparent pixel outside the original region. Resolve the listed conflicts by changing padding, size, selection, pivots, or existing shapes/borders. Empty frames are retained when standardizing sizes.
+
+Bounds editing requires rectangle and pivot editing support; preserving border lines or translated shapes also requires their corresponding editing support/providers. Full-resolution alpha data is required. If the provider returns downsampled pixels, increase the texture import Max Size and reload. Source image pixels are unchanged, and the tool cannot create padding beyond the texture edges.
+
+## Copying properties and shapes
+
+Select one source sprite and click **Copy Properties**. Select one or more destinations, optionally in another texture, and click **Paste Properties…**. The panel uses the copied snapshot, including unapplied source edits. Choose Pivot, Border, Outline, Physics Shape, and/or either tessellation value. Outline and physics source selectors also support transfers between the two shape types. The choices remain selected when reopening the panel during the current window session.
+
+**Pivot coordinates** can copy the normalized alignment/value (retaining a preset), or the pixel offset from the source frame's bottom-left corner. Pixel copying converts a preset to Custom only when necessary. Fractional and outside-frame pivots are supported. Borders copy their pixel insets without scaling; overlapping borders are rejected.
+
+**Shape coordinates** defaults to **Pixels relative to pivot**, which preserves geometry size and its pixel offsets from the pivot. **Pixels from bottom-left** preserves local pixel coordinates relative to the frame origin. **Scale to frame size** explicitly scales X and Y independently with the destination dimensions. When also pasting Pivot, shape alignment uses the resulting destination pivot. Pixel modes do not preserve world size when textures have different Pixels Per Unit; the panel reports this difference.
+
+The viewport previews pivots in blue, borders in yellow, outlines in orange, and physics shapes in green. Outline interiors are tinted so you can inspect artwork outside the proposed render shape, especially when copying a collider into an outline. Dense contours use strokes without a fill. This is a geometry preview; it does not simulate the imported render mesh. Empty copied shapes clear the chosen destination and are identified in the panel. An unavailable source provider is reported separately from an empty shape.
+
+Each target row reports its result. If a contour would extend beyond a destination frame, a border would not fit, or a selected property cannot be edited, pasting is blocked. Uncheck incompatible targets or change the chosen properties/mapping. **Paste Properties** applies every included change together as one Undo step; **Cancel** leaves the document untouched. Each destination owns independent geometry. Names, rectangles, sprite IDs, and importer-specific custom data are retained. Use the main **Apply** button to save.
+
+The package's clipboard survives texture changes, window reopening, and assembly reloads in the same Unity session. It is separate from the operating system clipboard and clears when Unity exits. The versioned payload has an 8 MB size limit. Source images and importer platform settings are not part of the clipboard.
+
 ## Saving and recovery
 
 Apply (Ctrl+S) writes sprite metadata and reimports the texture. Revert reloads the asset and discards unapplied edits and history. Closing or switching textures offers Save/Discard/Cancel; opening the same texture keeps the current session. A failed save keeps the document open.
