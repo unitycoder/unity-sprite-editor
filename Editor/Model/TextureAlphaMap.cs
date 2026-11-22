@@ -5,7 +5,7 @@ namespace BetterSpriteEditor.Model
     /// <summary>
     /// Alpha channel of a texture, one byte per pixel (~16MB for a 4K atlas, cached per
     /// document). Values are kept rather than a bitmask so callers can pick their own
-    /// transparency threshold — outline generation needs that, slicing does not.
+    /// transparency threshold for outline generation, slicing, or trimming.
     ///
     /// Lives in readable-texture space, which can be smaller than the actual (source) space
     /// when import max-size caps the texture; conversions are provided.
@@ -53,7 +53,9 @@ namespace BetterSpriteEditor.Model
         }
 
         /// <summary>True when the rect (in actual/source pixels) contains any opaque pixel.</summary>
-        public bool AnyOpaqueInActualRect(Rect actualRect)
+        public bool AnyOpaqueInActualRect(Rect actualRect) => AnyOpaqueInActualRect(actualRect, 0);
+
+        internal bool AnyOpaqueInActualRect(Rect actualRect, byte threshold)
         {
             int x0 = Mathf.Clamp(Mathf.FloorToInt(actualRect.xMin * Width / (float)ActualWidth), 0, Width - 1);
             int x1 = Mathf.Clamp(Mathf.CeilToInt(actualRect.xMax * Width / (float)ActualWidth) - 1, 0, Width - 1);
@@ -64,7 +66,7 @@ namespace BetterSpriteEditor.Model
             {
                 for (int x = x0; x <= x1; x++)
                 {
-                    if (IsOpaque(x, y))
+                    if (IsOpaque(x, y, threshold))
                         return true;
                 }
             }

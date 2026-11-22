@@ -88,7 +88,9 @@ For a local checkout, keep this folder outside your project's `Assets` directory
 ### Slicing
 
 - **Four methods**: automatic (alpha connected-components), grid by cell size, grid by cell count, isometric (staggered diamond grid with a diamond-shaped emptiness test).
-- **Non-destructive preview** — orange ghost rects update live as you tune parameters; nothing is written until you commit, and the whole slice is one undo step. Grid-by-count creates exactly the requested count when it fits; indivisible remainder pixels stay at the right/bottom edges.
+- **Reusable slicing settings** — save/load parameter-only JSON, remember the last settings, and name cells from each texture with stable index/row/column tokens. Keep Existing is the default for additive slicing.
+- **Batch slicing** — select textures or folders in Project, review per-texture previews, then apply with cancellation between textures and guarded restore of completed saves. Open `Assets > Batch Slice in Better Sprite Editor`.
+- **Non-destructive preview** — orange ghost rects update live as you tune parameters; in the single-texture panel, Slice is one undo step and Apply saves it. Grid-by-count creates exactly the requested count when it fits; indivisible remainder pixels stay at the right/bottom edges.
 - Skip-empty-cells, offset/padding, pivot presets, and a keep-existing policy that protects hand-edited regions.
 
 ### Custom Outline & Physics Shape modes
@@ -149,7 +151,7 @@ Existing sprite IDs are retained during supported edits. Deleting or replacing r
 
 Usage searches do not prove that a sprite is unused: dynamic loading and package assets are outside their scope, and skipped or unresolved results remain unknown. Shared shapes must fit every selected frame. Point Target is a simplification request, not a guaranteed maximum.
 
-Presentation order is saved per user under `UserSettings/BetterSpriteEditor/`; it does not change Unity's sprite picker order. Secondary-texture editing, multi-texture batch operations, and animation preview/export are not implemented.
+Presentation order is saved per user under `UserSettings/BetterSpriteEditor/`; it does not change Unity's sprite picker order. Multi-texture batch operations currently support slicing. Secondary-texture editing and animation preview/export are not implemented.
 
 See the [user guide](Documentation~/index.md) for saving, recovery, and detailed limitations, and the [changelog](CHANGELOG.md) for changes.
 

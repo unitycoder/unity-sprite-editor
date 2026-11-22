@@ -46,6 +46,14 @@ namespace BetterSpriteEditor.UI
         // restore silently" from "fresh open after a crash, ask first".
         [SerializeField] private bool hadUnappliedChanges;
 
+        internal static string PendingEditsForAsset(string guid)
+        {
+            foreach (var window in Resources.FindObjectsOfTypeAll<BetterSpriteEditorWindow>())
+                if (window.document?.AssetGuid == guid && window.document.IsDirty)
+                    return "This texture has unsaved Better Sprite Editor edits. Apply or revert them first.";
+            return null;
+        }
+
         private SpriteDocument document;
         private SelectionModel selection;
         private HistoryStack history;

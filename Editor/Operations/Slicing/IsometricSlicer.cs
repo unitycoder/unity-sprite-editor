@@ -60,8 +60,8 @@ namespace BetterSpriteEditor.Operations.Slicing
         /// Walks the diamond row by row from its horizontal axis outwards, narrowing by the
         /// gradient each step, and reports whether enough of it is opaque.
         /// </summary>
-        private static bool DiamondHasContent(
-            Rect rect, IsometricSliceSettings settings, float gradient, TextureAlphaMap alphaMap)
+        internal static bool DiamondHasContent(
+            Rect rect, IsometricSliceSettings settings, float gradient, TextureAlphaMap alphaMap, byte threshold = 0)
         {
             int originX = (int)rect.x;
             int originY = (int)rect.y;
@@ -77,9 +77,9 @@ namespace BetterSpriteEditor.Operations.Slicing
                 int inset = Mathf.CeilToInt(gradient * rowOffset);
                 for (int x = inset; x < width - inset; x++)
                 {
-                    if (alphaMap.IsOpaqueActual(originX + x, originY + topY - rowOffset))
+                    if (alphaMap.IsOpaqueActual(originX + x, originY + topY - rowOffset, threshold))
                         opaquePixels++;
-                    if (alphaMap.IsOpaqueActual(originX + x, originY + bottomY + rowOffset))
+                    if (alphaMap.IsOpaqueActual(originX + x, originY + bottomY + rowOffset, threshold))
                         opaquePixels++;
                     totalPixels += 2;
                 }
@@ -90,7 +90,7 @@ namespace BetterSpriteEditor.Operations.Slicing
             {
                 for (int x = 0; x < width; x++)
                 {
-                    if (alphaMap.IsOpaqueActual(originX + x, originY + topY + 1))
+                    if (alphaMap.IsOpaqueActual(originX + x, originY + topY + 1, threshold))
                         opaquePixels++;
                     totalPixels++;
                 }
