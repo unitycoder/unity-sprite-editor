@@ -6,7 +6,7 @@ An editor-only sprite metadata tool targeting Unity 2023.1 and newer, using the 
 
 - Multi-select of sprite regions with Unity-style multi-edit inspector.
 - Create, move, resize, combine, split, rename, pivot, and border tools.
-- Automatic, grid, and isometric slicing with preview before commit.
+- Automatic, grid, and isometric slicing with preview, reusable settings, stable grid naming, and multi-texture batch processing.
 - Outline and physics-shape editing, generation, and shared shapes.
 - Undo/redo history (Ctrl+Z / Ctrl+Y), including after Apply.
 - Searchable region list and reference search in loaded scenes or project assets.
@@ -26,6 +26,28 @@ Open a texture in the editor via one of:
 - `Window > 2D > Better Sprite Editor` (uses the currently selected texture),
 - right-click a texture in the Project window → `Open in Better Sprite Editor`,
 - the texture importer inspector's context menu (⋮) → `Open in Better Sprite Editor`.
+
+## Repeatable slicing
+
+Open **Slice** (Shift+S) for a Sprite texture in Multiple mode. Choose Automatic, Grid by Cell Size, Grid by Cell Count, or Isometric. Settings update the orange preview and candidate list without changing the document. **Slice** creates one undo step; the main **Apply** saves it. **Cancel** discards the preview.
+
+**Keep Existing** is the default: every existing region keeps its name, ID, pivot, border, and shapes; candidates overlapping any existing region are skipped. This adds new regions without updating or matching existing rectangles. **Replace All** explicitly removes all existing regions and creates new IDs, which can break references and discard associated skinning data. The panel reports add/remove counts. A result with no new regions leaves the sheet unchanged.
+
+Names support `{texture}`, `{index}`, `{row}`, and `{col}`, with optional numeric padding such as `{index:000}`. For example, `{texture}_{row:00}_{col:00}` produces `cat_01_03` for row 1, column 3 of `cat.png`. Grid coordinates start at zero at the top left; indexes are assigned before empty or overlapping cells are skipped. Filling an empty cell therefore does not renumber later cells in the same grid. Changing the grid can change indexes; stable names do not preserve IDs when using Replace All. Automatic slicing supports `{texture}` and `{index}` only. Name collisions block the operation instead of silently renumbering sprites.
+
+**Save settings…** and **Load settings…** use a versioned JSON file containing slicing parameters, naming, pivot, and the existing-region policy. They contain no texture identity, sprite IDs, fixed rectangles, or texture importer settings. The same settings are recomputed for each texture, including its own filename. Save the JSON in a project-owned location to share it. Last-used settings are remembered locally in `UserSettings/BetterSpriteEditor/last-slicing-settings.json` and shared by the single-texture and batch panels.
+
+**Alpha threshold** counts pixels with alpha strictly greater than the selected value (0–254). Grid Skip Empty and Automatic require full-resolution pixels; if the provider returns reduced pixels, increase the texture import Max Size or disable Skip Empty for grids. Isometric emptiness uses the existing diamond sampling rule. Preview is limited to 50,000 candidate regions; Automatic additionally limits input to 16 million pixels per texture.
+
+## Slicing multiple textures
+
+1. Select textures or folders in Project and choose **Assets > Batch Slice in Better Sprite Editor**, or open **Window > 2D > Better Sprite Editor Batch Slice**. Folder selection includes textures recursively; duplicate selections are deduplicated.
+2. Set the shared slicing parameters and click **Preview included**. Select a texture row to inspect its artwork, generated names, rectangles, skipped cells, and add/remove counts. Uncheck textures you want to exclude. Only writable assets under `Assets/` with region creation/deletion support in Sprite Multiple mode are accepted; the tool does not change importer mode automatically.
+3. Resolve errors or uncheck affected textures, then click **Apply N reviewed textures**. This saves each changed texture once. Unchanged textures are not reimported. The tool checks texture/importer revisions, presentation order, settings, and regenerated results against the preview before each save. Unapplied importer edits, unsaved Better Sprite Editor edits, and pending recovery data block that texture.
+4. **Cancel remaining** stops between textures. Completed saves remain; the batch is not one global Undo operation. Apply can continue the remaining reviewed textures in the same run. Previewing again starts a new run on the next Apply, retaining earlier backups. Closing the window or reloading assemblies stops the queue; preview again before starting a new run.
+5. **Load last batch for restore** lists saved before-state records. Review the included rows and click **Restore N textures** to restore completed saves. Restore refuses textures edited since the batch, including changes to presentation order. Clear the list to return to slicing.
+
+Before each save, the tool writes the original region data under `UserSettings/BetterSpriteEditor/batch-slicing/`. Completed records survive closing the window and assembly reloads. Older run folders remain available, but the UI loads only the latest run. If a save is interrupted, its Pending record is retained for inspection; the tool does not guess whether a partly completed write is safe to restore. Backups cover this editor's region IDs, names, rectangles, pivots, borders, custom data, outlines, physics shapes, and presentation order; they are not image, full importer, bone, or mesh-weight backups. Keep Existing is the appropriate mode for adding slices while retaining existing edited sprites.
 
 ## Keeping pivots anchored
 
@@ -83,7 +105,7 @@ Dragging rows changes this editor's presentation order. Apply saves that order u
 - Shared shapes retain fractional and outside-frame pivots. The resulting polygon must fit every selected frame without clipping; otherwise generation reports the incompatible frame and leaves existing shapes untouched. Use larger aligned frame bounds, reduce Outset, or disable Shared Shape.
 - Point Target is a simplification request, not a hard cap: disconnected paths and preserved geometry can require more points. Preview reports the actual result.
 - Project usage search covers supported text assets under Assets. “No references found” applies only to the selected scope. Cancelled scans, unreadable/binary assets, and unapplied new sprites have unknown status. Package assets and dynamic loading are outside this scan.
-- Secondary-texture editing, batch operations across textures, and animation preview/export are not implemented. Sprite IDs are retained for existing sprites; deleting/replacing a region can invalidate references to that region.
+- Multi-texture batch operations currently support slicing. Secondary-texture editing and animation preview/export are not implemented. Sprite IDs are retained for existing sprites; deleting/replacing a region can invalidate references to that region.
 
 ## Version compatibility
 

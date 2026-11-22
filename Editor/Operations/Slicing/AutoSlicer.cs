@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using BetterSpriteEditor.Model;
@@ -14,6 +15,11 @@ namespace BetterSpriteEditor.Operations.Slicing
     {
         public static List<Rect> Slice(TextureAlphaMap alphaMap, int minWidth, int minHeight)
         {
+            return Slice(alphaMap, minWidth, minHeight, 0, int.MaxValue);
+        }
+
+        internal static List<Rect> Slice(TextureAlphaMap alphaMap, int minWidth, int minHeight, byte threshold, int limit)
+        {
             int width = alphaMap.Width;
             int height = alphaMap.Height;
             var visited = new BitArray(width * height);
@@ -22,7 +28,7 @@ namespace BetterSpriteEditor.Operations.Slicing
 
             for (int startIndex = 0; startIndex < width * height; startIndex++)
             {
-                if (visited[startIndex] || !alphaMap.IsOpaque(startIndex % width, startIndex / width))
+                if (visited[startIndex] || !alphaMap.IsOpaque(startIndex % width, startIndex / width, threshold))
                     continue;
 
                 // Flood-fill one component, tracking its bounding box.
@@ -48,7 +54,7 @@ namespace BetterSpriteEditor.Operations.Slicing
                             if (nx < 0 || nx >= width || ny < 0 || ny >= height)
                                 continue;
                             int neighborIndex = ny * width + nx;
-                            if (visited[neighborIndex] || !alphaMap.IsOpaque(nx, ny))
+                            if (visited[neighborIndex] || !alphaMap.IsOpaque(nx, ny, threshold))
                                 continue;
                             visited[neighborIndex] = true;
                             stack.Push(neighborIndex);
@@ -58,7 +64,10 @@ namespace BetterSpriteEditor.Operations.Slicing
 
                 var rect = alphaMap.ReadableBoundsToActualRect(xMin, yMin, xMax, yMax);
                 if (rect.width >= minWidth && rect.height >= minHeight)
+                {
+                    if (rects.Count >= limit) throw new InvalidOperationException($"Automatic slicing exceeds the {limit:N0} region preview limit.");
                     rects.Add(rect);
+                }
             }
 
             // Top row first, then left to right (texture space is y-up, so top = larger yMax).

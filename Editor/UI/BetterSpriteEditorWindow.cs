@@ -46,6 +46,14 @@ namespace BetterSpriteEditor.UI
         // restore silently" from "fresh open after a crash, ask first".
         [SerializeField] private bool hadUnappliedChanges;
 
+        internal static string PendingEditsForAsset(string guid)
+        {
+            foreach (var window in Resources.FindObjectsOfTypeAll<BetterSpriteEditorWindow>())
+                if (window.document?.AssetGuid == guid && window.document.IsDirty)
+                    return "This texture has unsaved Better Sprite Editor edits. Apply or revert them first.";
+            return null;
+        }
+
         private SpriteDocument document;
         private SelectionModel selection;
         private HistoryStack history;
@@ -602,7 +610,6 @@ namespace BetterSpriteEditor.UI
             };
 
             document.Changed += OnDocumentChanged;
-            selection.Changed += OnSelectionChanged;
 
             slicePanel.Hide();
             sliceToggle.SetValueWithoutNotify(false);
@@ -614,6 +621,8 @@ namespace BetterSpriteEditor.UI
             viewport.SetUnusedRegions(unusedRegionIds);
             viewport.SetSession(document, selection);
             inspector.Bind(document, selection, history);
+            // The shape preview reads the newly selected region's inspector settings.
+            selection.Changed += OnSelectionChanged;
             historyPanel.Bind(history);
             regionList.Bind(document, selection, history,
                 id => unusedRegionIds.Contains(id),
