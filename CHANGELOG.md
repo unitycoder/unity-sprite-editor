@@ -2,7 +2,9 @@
 
 All notable changes to this package are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-11-04
+
+Small improvements to regular operations.
 
 ### Added
 
@@ -11,7 +13,7 @@ All notable changes to this package are documented in this file. The format is b
 - Relative pivot adjustments: Offset (px) and Shift Pivots add a pixel delta to every selected pivot, including mixed alignments and unequal frame sizes, as one undoable edit.
 - Keep Pivot Position toggle in the region inspector: preserve each pivot's texture position during rectangle resizing, movement, nudging, and numeric multi-edit, with undo/redo and recovery support.
 
-## [0.1.0] - 2026-10-08
+## [0.1.0] - 2026-10-15
 
 Initial release.
 
