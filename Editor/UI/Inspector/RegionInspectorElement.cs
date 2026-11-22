@@ -148,10 +148,10 @@ namespace BetterSpriteEditor.UI.Inspector
         private TextField nameField;
         private VisualElement nameInput;
         private Image nameWarningIcon;
-        private IntegerField xField;
-        private IntegerField yField;
-        private IntegerField widthField;
-        private IntegerField heightField;
+        private RegionIntegerField xField;
+        private RegionIntegerField yField;
+        private RegionIntegerField widthField;
+        private RegionIntegerField heightField;
         private Toggle keepPivotToggle;
         private bool keepPivotPosition;
         internal bool KeepPivotPosition => keepPivotPosition;
@@ -162,13 +162,22 @@ namespace BetterSpriteEditor.UI.Inspector
         private Vector2Field pivotOffsetField;
         private Button shiftPivotsButton;
         private HelpBox pivotOffsetWarning;
-        private IntegerField borderLeftField;
-        private IntegerField borderRightField;
-        private IntegerField borderTopField;
-        private IntegerField borderBottomField;
+        private RegionIntegerField borderLeftField;
+        private RegionIntegerField borderRightField;
+        private RegionIntegerField borderTopField;
+        private RegionIntegerField borderBottomField;
 
         private bool refreshing;
         private bool nameFieldEditing;
+        private VisualElement pendingField;
+        private Action commitPendingInput;
+
+        // Use the same parser as Unity when a selection change finishes a delayed numeric edit.
+        private sealed class RegionIntegerField : IntegerField
+        {
+            public RegionIntegerField(string label) : base(label) { }
+            public int ParseInput(string input) => StringToValue(input);
+        }
 
         private const string unitModePrefsKey = "BetterSpriteEditor.PivotUnitMode";
         private const string keepPivotPrefsKey = "BetterSpriteEditor.KeepPivotPosition";
@@ -214,12 +223,9 @@ namespace BetterSpriteEditor.UI.Inspector
             fieldsRoot.Add(BuildShapeSection());
 
             nameField = new TextField("Name") { isDelayed = true, style = { flexGrow = 1 } };
-            nameField.RegisterValueChangedCallback(OnNameChanged);
-            // Live feedback while typing: the delayed field only commits on Enter/blur, so
-            // InputEvent is what tells us the text changed keystroke by keystroke.
+            RegisterDelayedEdit(nameField, text => text, Rename);
             nameField.RegisterCallback<InputEvent>(evt => UpdateNameValidation(evt.newData));
-            // Tracked so refreshes (document/selection events firing mid-edit) never
-            // overwrite text the user is in the middle of typing.
+            // Document refreshes during typing must preserve the uncommitted name.
             nameField.RegisterCallback<FocusInEvent>(_ => nameFieldEditing = true);
             nameField.RegisterCallback<FocusOutEvent>(_ =>
             {
@@ -682,8 +688,11 @@ namespace BetterSpriteEditor.UI.Inspector
             if (document != null)
                 document.Changed -= Refresh;
             if (selection != null)
-                selection.Changed -= Refresh;
+                selection.Changed -= OnSelectionChanged;
 
+            pendingField = null;
+            commitPendingInput = null;
+            nameFieldEditing = false;
             document = newDocument;
             selection = newSelection;
             history = newHistory;
@@ -693,8 +702,24 @@ namespace BetterSpriteEditor.UI.Inspector
             if (document != null)
                 document.Changed += Refresh;
             if (selection != null)
-                selection.Changed += Refresh;
+                selection.Changed += OnSelectionChanged;
 
+            Refresh();
+        }
+
+        private void FinishPendingInput()
+        {
+            var commit = commitPendingInput;
+            pendingField = null;
+            commitPendingInput = null;
+            commit?.Invoke();
+        }
+
+        private void OnSelectionChanged()
+        {
+            // Pointer selection can run before UI Toolkit commits the focused field on blur.
+            FinishPendingInput();
+            nameFieldEditing = false;
             Refresh();
         }
 
@@ -788,7 +813,9 @@ namespace BetterSpriteEditor.UI.Inspector
         {
             int first = getter(regions[0]);
             bool mixed = regions.Exists(region => getter(region) != first);
-            field.SetValueWithoutNotify(first);
+            // Unity clears a mixed integer to zero on focus. Seeding that value keeps
+            // focusing the dash from dispatching a numeric edit to the selection.
+            field.SetValueWithoutNotify(mixed ? 0 : first);
             field.showMixedValue = mixed;
         }
 
@@ -796,9 +823,9 @@ namespace BetterSpriteEditor.UI.Inspector
         /// Applies the mutation to every selected region (clone → mutate → clamp) and records
         /// the changes as one history entry.
         /// </summary>
-        private void ApplyEdit(string labelPrefix, Action<SpriteRegion> mutate, bool rectEdit = false)
+        private void ApplyEdit(string labelPrefix, List<SpriteRegion> regions, Action<SpriteRegion> mutate,
+            bool rectEdit = false)
         {
-            var regions = GetSelectedRegions();
             if (regions.Count == 0 || refreshing)
                 return;
 
@@ -828,23 +855,20 @@ namespace BetterSpriteEditor.UI.Inspector
                 : new CompositeCommand(label, commands));
         }
 
-        private void OnNameChanged(ChangeEvent<string> evt)
+        private void Rename(List<SpriteRegion> regions, string name)
         {
-            if (refreshing)
-                return;
-            var regions = GetSelectedRegions();
             if (regions.Count != 1)
                 return;
 
-            if (!RegionValidator.IsNameAvailable(document, regions[0], evt.newValue))
+            if (!RegionValidator.IsNameAvailable(document, regions[0], name))
             {
                 // Empty or duplicate name — reject. The text stays in the field with the warning
                 // visible while it has focus; losing focus restores the region's real name.
-                UpdateNameValidation(evt.newValue);
+                UpdateNameValidation(name);
                 Refresh();
                 return;
             }
-            ApplyEdit("Rename", region => region.Name = evt.newValue);
+            ApplyEdit("Rename", regions, region => region.Name = name);
         }
 
         private static readonly Color nameWarningColor = new Color(1f, 0.6f, 0.1f);
@@ -885,7 +909,7 @@ namespace BetterSpriteEditor.UI.Inspector
                 return;
 
             var newAlignment = (SpriteAlignment)evt.newValue;
-            ApplyEdit("Set alignment of", region =>
+            ApplyEdit("Set alignment of", GetSelectedRegions(), region =>
             {
                 // Switching to Custom must keep the pivot where it is, not restore a stale vector.
                 if (newAlignment == SpriteAlignment.Custom)
@@ -901,7 +925,7 @@ namespace BetterSpriteEditor.UI.Inspector
 
             // This is an absolute position from each rect's origin. Relative adjustments
             // use the separate Offset (px) control and Shift Pivots action.
-            ApplyEdit("Set pivot of", region => region.Pivot = UnitMode == PivotUnitMode.Pixels
+            ApplyEdit("Set pivot of", GetSelectedRegions(), region => region.Pivot = UnitMode == PivotUnitMode.Pixels
                 ? new Vector2(
                     region.Rect.width > 0f ? evt.newValue.x / region.Rect.width : 0f,
                     region.Rect.height > 0f ? evt.newValue.y / region.Rect.height : 0f)
@@ -938,14 +962,55 @@ namespace BetterSpriteEditor.UI.Inspector
                 ShowPivotOffsetWarning(error);
         }
 
-        private void RegisterIntCallback(IntegerField field, string labelPrefix, Action<SpriteRegion, int> setter,
+        private void RegisterIntCallback(RegionIntegerField field, string labelPrefix, Action<SpriteRegion, int> setter,
             bool rectEdit = false)
         {
+            RegisterDelayedEdit(field, field.ParseInput, (targets, value) =>
+            {
+                if (rectEdit && !document.CanEditRect)
+                    return;
+                ApplyEdit(labelPrefix, targets, region => setter(region, value), rectEdit);
+            });
+        }
+
+        private void RegisterDelayedEdit<T>(TextInputBaseField<T> field, Func<string, T> parse,
+            Action<List<SpriteRegion>, T> apply)
+        {
+            string draft = null;
+            field.RegisterCallback<InputEvent>(evt =>
+            {
+                if (refreshing || selection == null || field.text != evt.newData)
+                    return;
+                // A silent model refresh can still notify the inner text element.
+                draft = evt.newData;
+                if (!field.showMixedValue && draft == field.value?.ToString())
+                    draft = null;
+                if (draft == null || pendingField == field)
+                    return;
+
+                var ids = new HashSet<GUID>(selection.Ids);
+                pendingField = field;
+                commitPendingInput = () =>
+                {
+                    if (draft != null && field.text == draft)
+                        apply(document.Regions.FindAll(region => ids.Contains(region.Id)), parse(draft));
+                };
+            });
+            field.RegisterCallback<FocusOutEvent>(_ =>
+            {
+                if (pendingField == field)
+                    FinishPendingInput();
+            });
             field.RegisterValueChangedCallback(evt =>
             {
-                if (refreshing || (rectEdit && (document == null || !document.CanEditRect)))
+                if (refreshing || document == null || !EqualityComparer<T>.Default.Equals(evt.newValue, field.value))
                     return;
-                ApplyEdit(labelPrefix, region => setter(region, evt.newValue), rectEdit);
+                if (pendingField == field)
+                {
+                    pendingField = null;
+                    commitPendingInput = null;
+                }
+                apply(GetSelectedRegions(), evt.newValue);
             });
         }
 
@@ -974,9 +1039,9 @@ namespace BetterSpriteEditor.UI.Inspector
             return vectorField;
         }
 
-        private static IntegerField MakeIntField(string label)
+        private static RegionIntegerField MakeIntField(string label)
         {
-            var field = new IntegerField(label) { isDelayed = true, style = { flexGrow = 1, flexBasis = 0 } };
+            var field = new RegionIntegerField(label) { isDelayed = true, style = { flexGrow = 1, flexBasis = 0 } };
             field.labelElement.style.minWidth = 16;
             return field;
         }

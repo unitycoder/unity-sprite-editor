@@ -9,6 +9,10 @@ All notable changes to this package are documented in this file. The format is b
 - Reusable slicing settings with save/load JSON, last-used settings, target-texture name tokens, stable grid cell indexes/coordinates, alpha threshold, and Keep Existing as the default policy.
 - Batch slicing from Project textures/folders with per-asset review, stale-preview and pending-edit checks, cancellation between assets, before-state backups, and guarded restore of completed saves.
 
+### Fixed
+
+- Keep pending inspector edits on the original sprite selection.
+
 ## [0.1.1] - 2026-11-04
 
 Small improvements to regular operations.

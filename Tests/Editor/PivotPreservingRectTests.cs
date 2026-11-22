@@ -278,6 +278,78 @@ namespace BetterSpriteEditor.Tests
                 AssertAnchor(restored.Regions[i], originals[i].GetPivotTexturePosition());
         }
 
+        [TestCase(true, false)]
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        public void Inspector_DirectSelectionCommitsDelayedFieldToOriginalSprites(bool editName, bool multi)
+        {
+            region.Rect = new Rect(40, 40, 4, 40);
+            var other = region.Clone();
+            other.Id = GUID.Generate();
+            other.Name = "other";
+            other.Rect = new Rect(80, 40, 6, 40);
+            document.Regions.Add(other);
+            if (multi)
+                selection.Add(other.Id);
+            var next = new SpriteRegion
+            {
+                Id = GUID.Generate(), Name = "next", Rect = new Rect(4, 4, 12, 12)
+            };
+            document.Regions.Add(next);
+            var inspector = Inspector(false);
+            var viewport = new SpriteViewportElement();
+            inspector.parent.Add(viewport);
+            viewport.SetSession(document, selection);
+            context.Transform = viewport.Transform;
+            viewport.ActiveTool = tool;
+
+            var nameField = inspector.Query<TextField>().ToList().Single(field => field.label == "Name");
+            var widthField = Field(inspector, "W");
+            VisualElement field = editName ? nameField : widthField;
+            var input = field.Query<TextElement>().ToList().Single(element => !(element is Label));
+            input.Focus();
+            Assert.That(history.Position, Is.Zero, "Focusing a mixed field must preserve its values.");
+            using (var key = KeyDownEvent.GetPooled(new Event
+                   { type = EventType.KeyDown, character = editName ? 'Z' : '1' }))
+            {
+                key.target = input;
+                input.SendEvent(key);
+            }
+            string editedName = editName ? nameField.text : region.Name;
+            int editedWidth = editName ? (int)region.Rect.width : int.Parse(widthField.text);
+            if (editName)
+                Assert.That(editedName, Does.Contain("Z"));
+            else
+                Assert.That(editedWidth, Is.Not.EqualTo(region.Rect.width));
+            Assert.That(history.Position, Is.Zero);
+
+            var point = viewport.LocalToWorld(viewport.Transform.TextureToView(next.Rect.center));
+            using (var down = PointerDownEvent.GetPooled(new Event { type = EventType.MouseDown, mousePosition = point }))
+            {
+                down.target = viewport;
+                viewport.SendEvent(down);
+            }
+            using (var up = PointerUpEvent.GetPooled(new Event { type = EventType.MouseUp, mousePosition = point }))
+            {
+                up.target = viewport;
+                viewport.SendEvent(up);
+            }
+
+            Assert.That(selection.ActiveId, Is.EqualTo(next.Id));
+            Assert.That(next.Name, Is.EqualTo("next"));
+            Assert.That(next.Rect.width, Is.EqualTo(12));
+            Assert.That(region.Name, Is.EqualTo(editedName));
+            Assert.That(region.Rect.width, Is.EqualTo(editedWidth));
+            Assert.That(other.Rect.width, Is.EqualTo(multi ? editedWidth : 6));
+            Assert.That(nameField.value, Is.EqualTo(next.Name));
+            Assert.That(widthField.value, Is.EqualTo(next.Rect.width));
+            Assert.That(history.Position, Is.EqualTo(1));
+            history.Undo();
+            Assert.That(region.Name, Is.EqualTo("frame"));
+            Assert.That(region.Rect.width, Is.EqualTo(4));
+            Assert.That(other.Rect.width, Is.EqualTo(6));
+        }
+
         [Test]
         public void Inspector_ToggleIsRememberedWithoutEditingTheDocument()
         {

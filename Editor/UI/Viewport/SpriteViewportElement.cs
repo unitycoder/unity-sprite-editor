@@ -260,6 +260,8 @@ namespace BetterSpriteEditor.UI.Viewport
 
         private void OnPointerDown(PointerDownEvent evt)
         {
+            // Finish any delayed inspector field before the tool selects its next region.
+            Focus();
             bool actionKey = evt.ctrlKey || evt.commandKey;
 
             // The onion-skin box is overlay UI: a plain left press inside it places the
